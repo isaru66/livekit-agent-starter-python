@@ -17,6 +17,7 @@ from livekit.agents import (
     inference,
     room_io,
 )
+from livekit.plugins import azure
 
 import asyncio
 from livekit.plugins import noise_cancellation, silero
@@ -108,7 +109,12 @@ async def my_agent(ctx: JobContext):
         # See all available models at https://docs.livekit.io/agents/models/stt/
         # stt=inference.STT(model="assemblyai/universal-streaming", language="en"),
         # stt=inference.STT(model="cartesia/ink-whisper", language="th"),
-        stt=inference.STT(model="deepgram/nova-2", language="th"),
+        # stt=inference.STT(model="deepgram/nova-2", language="th"),
+        stt=azure.stt.STT(
+            speech_key=os.environ["AZURE_SPEECH_KEY"],
+            speech_region=os.environ["AZURE_SPEECH_REGION"],
+            language="th-TH",
+        ),
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
         llm=inference.LLM(model="openai/gpt-4.1-mini"),
