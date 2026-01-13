@@ -1,4 +1,5 @@
 import logging
+import os
 
 from dotenv import load_dotenv
 from livekit import rtc
@@ -6,14 +7,21 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    AudioConfig,
+    BackgroundAudioPlayer,
+    BuiltinAudioClip,
+    function_tool,
     JobContext,
     JobProcess,
     cli,
     inference,
     room_io,
 )
+
+import asyncio
 from livekit.plugins import noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from tavily import TavilyClient
 
 logger = logging.getLogger("agent")
 
@@ -46,6 +54,35 @@ class Assistant(Agent):
     #
     #     return "sunny with a temperature of 70 degrees."
 
+    @function_tool
+    async def search_web(self, query: str) -> str:
+        """
+        Search the web for information based on the given query.
+
+        Always use this function whenever the user requests a web search
+
+        Args:
+            query: The search query to look up on the web.
+        """
+
+        # simulate a long web search to demonstrate the background "thinking" audio
+        logger.info("TAVILY SearchAgent thinking...")
+        
+        
+
+        client = TavilyClient(os.environ["TAVILY_API_KEY"])
+        response = client.search(
+            query=query,
+            search_depth="advanced"
+        )
+        print(response)
+        logger.info("TAVILY SearchAgent finished. simulating delay...")
+        delay = os.environ.get("TAVILY_SEARCH_DELAY")
+        if delay:
+            await asyncio.sleep(int(delay))
+        return response
+        # return "The request failed, give the users some information based on your knowledge"
+
 
 server = AgentServer()
 
@@ -69,14 +106,20 @@ async def my_agent(ctx: JobContext):
     session = AgentSession(
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
-        stt=inference.STT(model="assemblyai/universal-streaming", language="en"),
+        # stt=inference.STT(model="assemblyai/universal-streaming", language="en"),
+        # stt=inference.STT(model="cartesia/ink-whisper", language="th"),
+        stt=inference.STT(model="deepgram/nova-2", language="th"),
         # A Large Language Model (LLM) is your agent's brain, processing user input and generating a response
         # See all available models at https://docs.livekit.io/agents/models/llm/
         llm=inference.LLM(model="openai/gpt-4.1-mini"),
         # Text-to-speech (TTS) is your agent's voice, turning the LLM's text into speech that the user can hear
         # See all available models as well as voice selections at https://docs.livekit.io/agents/models/tts/
+
+        # Voice:
+        # male: Blake cartesia/sonic-3:a167e0f3-df7e-4d52-a9c3-f949145efdab
+        # female: Jacqueline cartesia/sonic-3:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc        
         tts=inference.TTS(
-            model="cartesia/sonic-3", voice="9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
+            model="cartesia/sonic-3", voice="a167e0f3-df7e-4d52-a9c3-f949145efdab"
         ),
         # VAD and turn detection are used to determine when the user is speaking and when the agent should respond
         # See more at https://docs.livekit.io/agents/build/turns
@@ -116,6 +159,26 @@ async def my_agent(ctx: JobContext):
                 else noise_cancellation.BVC(),
             ),
         ),
+    )
+
+    background_audio = BackgroundAudioPlayer(
+        # play office ambience sound looping in the background
+        # ambient_sound=AudioConfig(BuiltinAudioClip.OFFICE_AMBIENCE, volume=0.8),
+        
+        # play ringtone sound when the agent is thinking
+        thinking_sound=[
+            # AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING, volume=0.8),
+            # AudioConfig(BuiltinAudioClip.KEYBOARD_TYPING2, volume=0.7),
+            # AudioConfig(BuiltinAudioClip.HOLD_MUSIC, volume=0.8),
+            AudioConfig("sound/ringtone.mp3", volume=0.7),
+        ],
+    )
+    await background_audio.start(room=ctx.room, agent_session=session)
+
+    # Initiating speech
+    await session.say(
+        "สวัดดีครับ ต้องการถามอะไรเกี่ยวกับ Contoso Bank ไหมครับ",
+        allow_interruptions=True,
     )
 
     # Join the room and connect to the user
